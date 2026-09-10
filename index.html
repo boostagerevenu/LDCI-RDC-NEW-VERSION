@@ -2217,7 +2217,7 @@
       import { initializeApp } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js";
       import { getAnalytics, isSupported as analyticsSupported } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-analytics.js";
       import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-auth.js";
-      import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js";
+      import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs, runTransaction } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js";
 
       const firebaseConfig = {
         apiKey: "AIzaSyBt1CvT1ETru6EFNZleVSKzury3s8c6d_Q",
@@ -2383,6 +2383,7 @@
                 wallet: null,
                 referralCode: 'LDCI-' + Math.floor(100000 + Math.random() * 900000),
                 referredBy: referralCodeParent || '',
+                referredByUid: '',
                 createdAt: now,
                 welcomeBonusGranted: false
             };
@@ -2449,76 +2450,85 @@
         }
 
         // ================= CALCUL AUTOMATIQUE DES COMMISSIONS SUR 3 NIVEAUX =================
-        async function distributeReferralCommissions(investorUid, investmentAmount) {
-            if (!investorUid || investmentAmount <= 0) return;
+        // ================= PARRAINAGE ROBUSTE / ANTI-DOUBLON =================
+        async function applyReferralCommissionAtomic(sponsorUid, investorUid, investmentId, level, rate, amount) {
+            if (!sponsorUid || !investorUid || !investmentId || amount <= 0) return false;
+            const commissionId = `ref_${investmentId}_L${level}_${investorUid}`;
+            const sponsorRef = doc(window.firebaseDb, 'users', sponsorUid);
+            const nowStr = new Date().toLocaleString('fr-FR', { year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' });
+
+            try {
+                await runTransaction(window.firebaseDb, async (transaction) => {
+                    const snap = await transaction.get(sponsorRef);
+                    if (!snap.exists()) throw new Error('Parrain introuvable');
+                    const sponsor = snap.data();
+                    const transactions = Array.isArray(sponsor.transactions) ? [...sponsor.transactions] : [];
+
+                    // Idempotence : une commission déterminée par transaction + niveau ne peut être créditée deux fois.
+                    if (transactions.some(t => t && t.commissionId === commissionId)) return;
+
+                    const commission = Math.round(Number(amount) * Number(rate));
+                    if (commission <= 0) return;
+                    transactions.unshift({
+                        id: commissionId,
+                        commissionId,
+                        type: 'autre',
+                        amount: commission,
+                        title: `Commission Niveau ${level} (${investorUid.slice(-6)})`,
+                        date: nowStr,
+                        status: 'Réussi',
+                        level,
+                        rate,
+                        investorUid,
+                        investmentId
+                    });
+
+                    transaction.update(sponsorRef, {
+                        balance: Number(sponsor.balance || 0) + commission,
+                        transactions
+                    });
+                });
+                return true;
+            } catch (e) {
+                console.error(`Erreur commission niveau ${level}:`, e);
+                return false;
+            }
+        }
+
+        async function distributeReferralCommissions(investorUid, investmentAmount, investmentId = '') {
+            if (!investorUid || Number(investmentAmount) <= 0 || !investmentId) return;
             try {
                 const investorProfile = await window.ldciGetProfile(investorUid);
-                if (!investorProfile || !investorProfile.referredBy) return;
+                if (!investorProfile) return;
 
-                const sponsor1Code = investorProfile.referredBy;
-                const sponsor1UserObj = await findUserByReferralCode(sponsor1Code);
-                if (!sponsor1UserObj) return;
+                let sponsor = null;
+                if (investorProfile.referredByUid) {
+                    const sponsorSnap = await getDoc(doc(window.firebaseDb, 'users', investorProfile.referredByUid));
+                    if (sponsorSnap.exists()) sponsor = { uid: sponsorSnap.id, ...sponsorSnap.data() };
+                }
+                if (!sponsor && investorProfile.referredBy) sponsor = await findUserByReferralCode(investorProfile.referredBy);
+                if (!sponsor || sponsor.uid === investorUid) return;
 
-                // Anti-double commission
-                const commissionTxTitle = `Commission Niveau 1 - Inv: ${investorUid.slice(-6)}`;
-                if ((sponsor1UserObj.transactions || []).some(t => t.title && t.title.includes(investorUid) && t.title.includes('Niveau 1'))) {
-                    return;
+                const chain = [];
+                const visited = new Set([investorUid]);
+                let current = sponsor;
+                for (let level = 1; level <= 3 && current; level++) {
+                    if (!current.uid || visited.has(current.uid)) break;
+                    visited.add(current.uid);
+                    chain.push({ uid: current.uid, level });
+
+                    let parent = null;
+                    if (current.referredByUid) {
+                        const snap = await getDoc(doc(window.firebaseDb, 'users', current.referredByUid));
+                        if (snap.exists()) parent = { uid: snap.id, ...snap.data() };
+                    }
+                    if (!parent && current.referredBy) parent = await findUserByReferralCode(current.referredBy);
+                    current = parent;
                 }
 
-                const nowStr = new Date().toLocaleString('fr-FR', { year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' });
-
-                // Niveau 1 (10%)
-                const comm1 = investmentAmount * 0.10;
-                sponsor1UserObj.balance = Number(sponsor1UserObj.balance || 0) + comm1;
-                if (!Array.isArray(sponsor1UserObj.transactions)) sponsor1UserObj.transactions = [];
-                sponsor1UserObj.transactions.unshift({
-                    id: 'comm1_' + Date.now(),
-                    type: 'autre',
-                    amount: comm1,
-                    title: `Commission Niveau 1 (${investorUid.slice(-6)})`,
-                    date: nowStr,
-                    status: 'Réussi'
-                });
-                await window.ldciSaveProfile(sponsor1UserObj.uid || sponsor1UserObj.id, sponsor1UserObj);
-
-                // Niveau 2 (3%)
-                if (sponsor1UserObj.referredBy) {
-                    const sponsor2Code = sponsor1UserObj.referredBy;
-                    const sponsor2UserObj = await findUserByReferralCode(sponsor2Code);
-                    if (sponsor2UserObj) {
-                        const comm2 = investmentAmount * 0.03;
-                        sponsor2UserObj.balance = Number(sponsor2UserObj.balance || 0) + comm2;
-                        if (!Array.isArray(sponsor2UserObj.transactions)) sponsor2UserObj.transactions = [];
-                        sponsor2UserObj.transactions.unshift({
-                            id: 'comm2_' + Date.now(),
-                            type: 'autre',
-                            amount: comm2,
-                            title: `Commission Niveau 2 (${investorUid.slice(-6)})`,
-                            date: nowStr,
-                            status: 'Réussi'
-                        });
-                        await window.ldciSaveProfile(sponsor2UserObj.uid || sponsor2UserObj.id, sponsor2UserObj);
-
-                        // Niveau 3 (1%)
-                        if (sponsor2UserObj.referredBy) {
-                            const sponsor3Code = sponsor2UserObj.referredBy;
-                            const sponsor3UserObj = await findUserByReferralCode(sponsor3Code);
-                            if (sponsor3UserObj) {
-                                const comm3 = investmentAmount * 0.01;
-                                sponsor3UserObj.balance = Number(sponsor3UserObj.balance || 0) + comm3;
-                                if (!Array.isArray(sponsor3UserObj.transactions)) sponsor3UserObj.transactions = [];
-                                sponsor3UserObj.transactions.unshift({
-                                    id: 'comm3_' + Date.now(),
-                                    type: 'autre',
-                                    amount: comm3,
-                                    title: `Commission Niveau 3 (${investorUid.slice(-6)})`,
-                                    date: nowStr,
-                                    status: 'Réussi'
-                                });
-                                await window.ldciSaveProfile(sponsor3UserObj.uid || sponsor3UserObj.id, sponsor3UserObj);
-                            }
-                        }
-                    }
+                const rates = {1: 0.10, 2: 0.03, 3: 0.01};
+                for (const member of chain) {
+                    await applyReferralCommissionAtomic(member.uid, investorUid, investmentId, member.level, rates[member.level], Number(investmentAmount));
                 }
             } catch (e) {
                 console.error("Erreur distribution commissions parrainage:", e);
@@ -2536,6 +2546,12 @@
                 showNotification("Veuillez renseigner tous les champs requis.", "error");
                 return;
             }
+            const phoneDigits = String(phoneRaw).replace(/\D/g, '');
+            const normalizedInputDigits = phoneDigits.startsWith('243') ? phoneDigits : (phoneDigits.startsWith('0') ? '243' + phoneDigits.slice(1) : '243' + phoneDigits);
+            if (!/^243\d{9}$/.test(normalizedInputDigits)) {
+                showNotification("Veuillez saisir un numéro congolais valide de 9 chiffres après +243.", "error");
+                return;
+            }
             if (pass.length < 6) {
                 showNotification("Le mot de passe doit comporter au moins 6 caractères.", "error");
                 return;
@@ -2550,10 +2566,16 @@
             }
 
             const tempReferralCode = 'LDCI-' + Math.floor(100000 + Math.random() * 900000);
+            let sponsorUser = null;
             if (inviteCode) {
+                sponsorUser = await findUserByReferralCode(inviteCode);
+                if (!sponsorUser) {
+                    showNotification("Le code de parrainage est invalide ou n'existe pas.", "error");
+                    return;
+                }
                 const isValidHierarchy = await validateReferralHierarchy(tempReferralCode, inviteCode);
-                if (!isValidHierarchy) {
-                    showNotification("Relation de parrainage invalide ou auto-parrainage interdit.", "error");
+                if (!isValidHierarchy || sponsorUser.uid === currentUser) {
+                    showNotification("Auto-parrainage ou relation de parrainage invalide.", "error");
                     return;
                 }
             }
@@ -2572,6 +2594,8 @@
 
                 const data = createEmptyUserData(phone, inviteCode);
                 data.referralCode = tempReferralCode;
+                data.referredBy = sponsorUser ? sponsorUser.referralCode : '';
+                data.referredByUid = sponsorUser ? sponsorUser.uid : '';
                 data.password = pass;
                 data.balance = 1000;
                 data.welcomeBonusGranted = true;
@@ -2614,6 +2638,12 @@
 
             if (!phone || !pass) {
                 showNotification("Veuillez remplir tous les champs de connexion.", "error");
+                return;
+            }
+            const loginDigits = String(phone).replace(/\D/g, '');
+            const normalizedLoginDigits = loginDigits.startsWith('243') ? loginDigits : (loginDigits.startsWith('0') ? '243' + loginDigits.slice(1) : '243' + loginDigits);
+            if (!/^243\d{9}$/.test(normalizedLoginDigits)) {
+                showNotification("Veuillez saisir un numéro congolais valide de 9 chiffres après +243.", "error");
                 return;
             }
 
@@ -2930,7 +2960,7 @@
                     saveTransaction('autre', cost, `Investissement (${selectedProduct.name})`, 'Réussi');
 
                     // Déclenchement automatique des commissions sur 3 niveaux
-                    await distributeReferralCommissions(currentUser, cost);
+                    await distributeReferralCommissions(currentUser, cost, newInvestment.uniqueId);
 
                     updateAccountStats();
 
@@ -3135,60 +3165,54 @@
         // ================= GESTION DE L'ÉQUIPE ET DES 3 NIVEAUX =================
         async function loadTeamData() {
             let data = getCurrentUserData();
-            if (!data || !data.referralCode) return;
+            if (!data || !currentUser) return;
 
             try {
                 const querySnapshot = await getDocs(collection(window.firebaseDb, 'users'));
-                let allUsers = [];
-                querySnapshot.forEach(docSnap => {
-                    allUsers.push({ uid: docSnap.id, ...docSnap.data() });
-                });
+                const allUsers = [];
+                querySnapshot.forEach(docSnap => allUsers.push({ uid: docSnap.id, ...docSnap.data() }));
 
-                const levelB = allUsers.filter(u => u.referredBy === data.referralCode);
-                
-                let levelC = [];
-                const levelBcodes = levelB.map(u => u.referralCode).filter(Boolean);
-                if (levelBcodes.length > 0) {
-                    levelC = allUsers.filter(u => levelBcodes.includes(u.referredBy));
-                }
+                // On utilise l'UID du parrain en priorité, avec le code comme compatibilité pour les anciens comptes.
+                const directOf = (u, sponsor) =>
+                    (u.referredByUid && u.referredByUid === sponsor.uid) ||
+                    (!u.referredByUid && u.referredBy === sponsor.referralCode);
 
-                let levelD = [];
-                const levelCcodes = levelC.map(u => u.referralCode).filter(Boolean);
-                if (levelCcodes.length > 0) {
-                    levelD = allUsers.filter(u => levelCcodes.includes(u.referredBy));
-                }
+                const levelB = allUsers.filter(u => directOf(u, { uid: currentUser, referralCode: data.referralCode }));
+                const levelC = allUsers.filter(u => levelB.some(b => directOf(u, b)));
+                const levelD = allUsers.filter(u => levelC.some(c => directOf(u, c)));
 
-                const totalMembers = levelB.length + levelC.length + levelD.length;
+                // Empêche un même compte d'être compté plusieurs fois en cas de données historiques incohérentes.
+                const uniq = arr => Array.from(new Map(arr.map(u => [u.uid, u])).values());
+                const B = uniq(levelB);
+                const Bids = new Set(B.map(u => u.uid));
+                const C = uniq(levelC.filter(u => !Bids.has(u.uid)));
+                const seenBC = new Set([...Bids, ...C.map(u => u.uid)]);
+                const D = uniq(levelD.filter(u => !seenBC.has(u.uid)));
 
-                let buyerCountB = levelB.filter(u => Array.isArray(u.investments) && u.investments.length > 0).length;
-                let buyerCountC = levelC.filter(u => Array.isArray(u.investments) && u.investments.length > 0).length;
-                let buyerCountD = levelD.filter(u => Array.isArray(u.investments) && u.investments.length > 0).length;
-                let totalBuyers = buyerCountB + buyerCountC + buyerCountD;
-
-                let teamRechargeTotal = 0;
-
-                allUsers.forEach(u => {
-                    if (levelB.some(b => b.uid === u.uid) || levelC.some(c => c.uid === u.uid) || levelD.some(d => d.uid === u.uid)) {
-                        teamRechargeTotal += Number(u.totalRecharge || 0);
-                    }
-                });
+                const totalMembers = B.length + C.length + D.length;
+                const buyerCountB = B.filter(u => Array.isArray(u.investments) && u.investments.length > 0).length;
+                const buyerCountC = C.filter(u => Array.isArray(u.investments) && u.investments.length > 0).length;
+                const buyerCountD = D.filter(u => Array.isArray(u.investments) && u.investments.length > 0).length;
+                const totalBuyers = buyerCountB + buyerCountC + buyerCountD;
+                const teamUsers = [...B, ...C, ...D];
+                const teamRechargeTotal = teamUsers.reduce((sum, u) => sum + Number(u.totalRecharge || 0), 0);
 
                 document.getElementById('team-total-members-display').innerText = totalMembers;
                 document.getElementById('team-total-recharge-display').innerText = teamRechargeTotal.toLocaleString();
                 document.getElementById('team-count-total').innerText = totalMembers;
-                document.getElementById('team-count-b').innerText = levelB.length;
-                document.getElementById('team-count-c').innerText = levelC.length;
-                document.getElementById('team-count-d').innerText = levelD.length;
-
+                document.getElementById('team-count-b').innerText = B.length;
+                document.getElementById('team-count-c').innerText = C.length;
+                document.getElementById('team-count-d').innerText = D.length;
                 document.getElementById('buyer-count-total').innerText = totalBuyers;
                 document.getElementById('buyer-count-b').innerText = buyerCountB;
                 document.getElementById('buyer-count-c').innerText = buyerCountC;
                 document.getElementById('buyer-count-d').innerText = buyerCountD;
 
-                window.teamCache = { B: levelB, C: levelC, D: levelD };
+                window.teamCache = { B, C, D };
                 renderTeamTable(currentTeamTabLevel);
             } catch (e) {
                 console.error("Erreur chargement équipe:", e);
+                showNotification("Impossible de charger l'équipe pour le moment.", "error");
             }
         }
 
