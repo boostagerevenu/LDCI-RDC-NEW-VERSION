@@ -3164,38 +3164,83 @@
 
         // ================= GESTION DE L'ÉQUIPE ET DES 3 NIVEAUX =================
         async function loadTeamData() {
-            let data = getCurrentUserData();
+            const data = getCurrentUserData();
             if (!data || !currentUser) return;
 
             try {
-                const querySnapshot = await getDocs(collection(window.firebaseDb, 'users'));
-                const allUsers = [];
-                querySnapshot.forEach(docSnap => allUsers.push({ uid: docSnap.id, ...docSnap.data() }));
+                // IMPORTANT : on ne lit plus toute la collection `users`.
+                // Chaque niveau est recherché directement par le lien de parrainage.
+                // Cela évite l'erreur `Impossible de charger l'équipe` lorsque les
+                // règles Firestore autorisent les requêtes ciblées mais pas la lecture
+                // de tous les utilisateurs.
+                const getDirectMembers = async (sponsorUid, sponsorReferralCode = '') => {
+                    const result = new Map();
 
-                // On utilise l'UID du parrain en priorité, avec le code comme compatibilité pour les anciens comptes.
-                const directOf = (u, sponsor) =>
-                    (u.referredByUid && u.referredByUid === sponsor.uid) ||
-                    (!u.referredByUid && u.referredBy === sponsor.referralCode);
+                    // Nouveau format : relation obligatoire par UID.
+                    try {
+                        const qUid = query(
+                            collection(window.firebaseDb, 'users'),
+                            where('referredByUid', '==', sponsorUid)
+                        );
+                        const snapUid = await getDocs(qUid);
+                        snapUid.forEach(d => result.set(d.id, { uid: d.id, ...d.data() }));
+                    } catch (err) {
+                        console.warn('Lecture équipe par referredByUid impossible:', err);
+                    }
 
-                const levelB = allUsers.filter(u => directOf(u, { uid: currentUser, referralCode: data.referralCode }));
-                const levelC = allUsers.filter(u => levelB.some(b => directOf(u, b)));
-                const levelD = allUsers.filter(u => levelC.some(c => directOf(u, c)));
+                    // Compatibilité avec les anciens comptes qui n'ont que le code.
+                    if (sponsorReferralCode) {
+                        try {
+                            const qCode = query(
+                                collection(window.firebaseDb, 'users'),
+                                where('referredBy', '==', sponsorReferralCode)
+                            );
+                            const snapCode = await getDocs(qCode);
+                            snapCode.forEach(d => {
+                                const u = { uid: d.id, ...d.data() };
+                                if (!u.referredByUid) result.set(d.id, u);
+                            });
+                        } catch (err) {
+                            console.warn('Lecture équipe par referredBy impossible:', err);
+                        }
+                    }
 
-                // Empêche un même compte d'être compté plusieurs fois en cas de données historiques incohérentes.
-                const uniq = arr => Array.from(new Map(arr.map(u => [u.uid, u])).values());
-                const B = uniq(levelB);
-                const Bids = new Set(B.map(u => u.uid));
-                const C = uniq(levelC.filter(u => !Bids.has(u.uid)));
-                const seenBC = new Set([...Bids, ...C.map(u => u.uid)]);
-                const D = uniq(levelD.filter(u => !seenBC.has(u.uid)));
+                    return Array.from(result.values());
+                };
+
+                // NIVEAU B : B a obligatoirement A comme parrain.
+                const B = await getDirectMembers(currentUser, data.referralCode || '');
+
+                // NIVEAU C : C a B comme parrain.
+                const cArrays = await Promise.all(
+                    B.map(b => getDirectMembers(b.uid, b.referralCode || ''))
+                );
+                const C = Array.from(
+                    new Map(cArrays.flat().map(u => [u.uid, u])).values()
+                ).filter(u => u.uid !== currentUser && !B.some(b => b.uid === u.uid));
+
+                // NIVEAU D : D a C comme parrain.
+                const dArrays = await Promise.all(
+                    C.map(c => getDirectMembers(c.uid, c.referralCode || ''))
+                );
+                const D = Array.from(
+                    new Map(dArrays.flat().map(u => [u.uid, u])).values()
+                ).filter(u =>
+                    u.uid !== currentUser &&
+                    !B.some(b => b.uid === u.uid) &&
+                    !C.some(c => c.uid === u.uid)
+                );
 
                 const totalMembers = B.length + C.length + D.length;
-                const buyerCountB = B.filter(u => Array.isArray(u.investments) && u.investments.length > 0).length;
-                const buyerCountC = C.filter(u => Array.isArray(u.investments) && u.investments.length > 0).length;
-                const buyerCountD = D.filter(u => Array.isArray(u.investments) && u.investments.length > 0).length;
+                const hasInvestment = u => Array.isArray(u.investments) && u.investments.length > 0;
+                const buyerCountB = B.filter(hasInvestment).length;
+                const buyerCountC = C.filter(hasInvestment).length;
+                const buyerCountD = D.filter(hasInvestment).length;
                 const totalBuyers = buyerCountB + buyerCountC + buyerCountD;
                 const teamUsers = [...B, ...C, ...D];
-                const teamRechargeTotal = teamUsers.reduce((sum, u) => sum + Number(u.totalRecharge || 0), 0);
+                const teamRechargeTotal = teamUsers.reduce(
+                    (sum, u) => sum + Number(u.totalRecharge || 0), 0
+                );
 
                 document.getElementById('team-total-members-display').innerText = totalMembers;
                 document.getElementById('team-total-recharge-display').innerText = teamRechargeTotal.toLocaleString();
@@ -3211,8 +3256,11 @@
                 window.teamCache = { B, C, D };
                 renderTeamTable(currentTeamTabLevel);
             } catch (e) {
-                console.error("Erreur chargement équipe:", e);
-                showNotification("Impossible de charger l'équipe pour le moment.", "error");
+                console.error('Erreur chargement équipe:', e);
+                showNotification(
+                    "Impossible de charger l’équipe. Vérifiez les autorisations Firestore ou votre connexion.",
+                    'error'
+                );
             }
         }
 
