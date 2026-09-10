@@ -724,59 +724,6 @@
             display: none;
         }
 
-        /* TIRAGE AU SORT */
-        .timer-display {
-            font-size: 20px;
-            font-weight: bold;
-            color: var(--danger);
-            margin: 12px 0;
-        }
-
-        .lottery-history-box {
-            margin-top: 20px;
-            background: var(--bg-card);
-            border-radius: var(--radius-md);
-            padding: 16px;
-            box-shadow: var(--shadow-subtle);
-            border: 1px solid var(--border-color);
-        }
-
-        .lottery-history-title {
-            font-size: 13px;
-            font-weight: bold;
-            color: var(--text-main);
-            margin-bottom: 12px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            border-bottom: 1px solid var(--border-color);
-            padding-bottom: 10px;
-        }
-
-        .lottery-history-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 10px 0;
-            border-bottom: 1px solid var(--border-color);
-            font-size: 12px;
-        }
-
-        .lottery-history-item:last-child {
-            border-bottom: none;
-        }
-
-        .badge-status {
-            padding: 4px 10px;
-            border-radius: var(--radius-lg);
-            font-size: 10px;
-            font-weight: bold;
-        }
-
-        .badge-status.pending { background: #FEFCBF; color: #B7791F; }
-        .badge-status.won { background: #C6F6D5; color: #22543D; }
-        .badge-status.lost { background: #FED7D7; color: #9B2C2C; }
-
         /* COMPTE & FINANCES */
         .user-info-bar {
             background: var(--bg-card);
@@ -1360,7 +1307,7 @@
             text-decoration: none;
             cursor: pointer;
         }
-    
+
         .deposit-amount-card.selected {
             border-color: var(--primary) !important;
             box-shadow: 0 0 0 2px rgba(0,184,148,.18);
@@ -1436,11 +1383,14 @@
             <div class="app-body">
                 <div class="form-card">
                     <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 16px; text-align: center; line-height: 1.5;">
-                        Veuillez renseigner vos informations pour créer votre compte sécurisé et bénéficier d'une prime de bienvenue.
+                        Veuillez renseigner votre numéro congolais (+243) et votre mot de passe pour créer votre compte sécurisé.
                     </div>
                     <div class="form-group">
-                        <label><i class="fa-solid fa-phone"></i> Numéro Mobile</label>
-                        <input type="tel" id="reg-phone" class="form-control" placeholder="Ex: 0840000000">
+                        <label><i class="fa-solid fa-phone"></i> Numéro Mobile (+243)</label>
+                        <div style="display: flex; align-items: stretch;">
+                            <div style="background: var(--bg-body); border: 1px solid var(--border-color); border-right: none; border-radius: var(--radius-sm) 0 0 var(--radius-sm); padding: 13px 12px; font-size: 14px; font-weight: bold; color: var(--text-main); display: flex; align-items: center;">+243</div>
+                            <input type="tel" id="reg-phone" class="form-control" placeholder="Ex: 840000000" style="border-radius: 0 var(--radius-sm) var(--radius-sm) 0;">
+                        </div>
                     </div>
                     <div class="form-group">
                         <label><i class="fa-solid fa-lock"></i> Mot De Passe</label>
@@ -1451,7 +1401,7 @@
                         <input type="password" id="reg-confirm-pass" class="form-control" placeholder="Répétez le mot de passe">
                     </div>
                     <div class="form-group">
-                        <label><i class="fa-solid fa-ticket-simple"></i> Code D'invitation</label>
+                        <label><i class="fa-solid fa-ticket-simple"></i> Code D'invitation (Parrain)</label>
                         <input type="text" id="reg-invite" class="form-control" placeholder="Code de parrainage (verrouillé si issu d'un lien)" readonly style="background: var(--bg-body);">
                     </div>
                     <div class="form-group">
@@ -1479,12 +1429,15 @@
                     <div style="width: 50px; height: 50px; background: linear-gradient(135deg, var(--primary), var(--secondary)); border-radius: var(--radius-md); display: flex; align-items: center; justify-content: center; margin: 0 auto 16px auto; color: white; font-size: 22px; box-shadow: 0 4px 12px rgba(0,184,148,0.3);">
                         <i class="fa-solid fa-seedling"></i>
                     </div>
-                    <h3 style="font-size: 16px; color: var(--text-main); margin-bottom: 8px;">Connexion Sécurisée</h3>
-                    <div style="font-size:12px;color:var(--text-muted);margin-bottom:20px; line-height: 1.5;">Veuillez saisir vos identifiants pour accéder à votre tableau de bord.</div>
+                    <h3 style="font-size: 16px; color: var(--text-main); margin-bottom: 8px;">Connexion Sécurisée (+243)</h3>
+                    <div style="font-size:12px;color:var(--text-muted);margin-bottom:20px; line-height: 1.5;">Veuillez saisir votre numéro congolais et votre mot de passe.</div>
                     
                     <div class="form-group" style="text-align: left;">
-                        <label><i class="fa-solid fa-phone"></i> Numéro Mobile</label>
-                        <input type="tel" id="login-phone" class="form-control" placeholder="Votre numéro">
+                        <label><i class="fa-solid fa-phone"></i> Numéro Mobile (+243)</label>
+                        <div style="display: flex; align-items: stretch;">
+                            <div style="background: var(--bg-body); border: 1px solid var(--border-color); border-right: none; border-radius: var(--radius-sm) 0 0 var(--radius-sm); padding: 13px 12px; font-size: 14px; font-weight: bold; color: var(--text-main); display: flex; align-items: center;">+243</div>
+                            <input type="tel" id="login-phone" class="form-control" placeholder="Votre numéro" style="border-radius: 0 var(--radius-sm) var(--radius-sm) 0;">
+                        </div>
                     </div>
                     <div class="form-group" style="text-align: left;">
                         <label><i class="fa-solid fa-lock"></i> Mot De Passe</label>
@@ -1534,7 +1487,7 @@
                 <div style="font-size: 14px; font-weight: bold; color: var(--text-main); margin-bottom: 10px; display: flex; align-items: center; gap: 6px;">
                     <i class="fa-solid fa-concierge-bell" style="color: var(--primary);"></i> Services Rapides
                 </div>
-                <div class="service-shortcuts">
+                <div class="service-shortcuts" style="grid-template-columns: repeat(3, 1fr);">
                     <div class="shortcut-item" onclick="switchView('team')">
                         <i class="fa-solid fa-user-plus"></i>
                         <span>Parrainage</span>
@@ -1817,43 +1770,6 @@
             </div>
         </div>
 
-        <!-- ================= VUE : TIRAGE AU SORT ================= -->
-        <div id="view-lottery" class="app-view">
-            <div class="app-header">
-                <span class="back-btn" onclick="switchView('account')"><i class="fa-solid fa-chevron-left"></i></span>
-                <span class="title"><i class="fa-solid fa-ticket"></i> Tirage au sort</span>
-                <span style="width: 32px;"></span>
-            </div>
-
-            <div class="app-body">
-                <div class="gift-card-box" style="text-align: center;">
-                    <i class="fa-solid fa-ticket-simple" style="font-size: 40px; color: var(--primary); margin-bottom: 14px;"></i>
-                    <span class="gift-label" style="font-size: 16px; margin-bottom: 12px;">Tirage au sort chanceux</span>
-                    
-                    <p style="font-size: 12px; color: var(--text-main); margin-bottom: 14px; line-height: 1.5; font-weight: 500;">
-                        Participez (min 1 500 FC). 1 gain garanti par série exacte de 10 participations. Max 15 participations par jour.
-                    </p>
-                    <div id="lottery-counter-info" style="font-size: 12px; color: var(--primary-dark); font-weight: bold; margin-bottom: 14px;"></div>
-
-                    <div id="timer-container" style="display: none;">
-                        <div style="font-size: 12px; color: var(--text-muted);">Tirage en cours...</div>
-                        <div class="timer-display" id="lottery-timer">05s</div>
-                    </div>
-
-                    <input type="number" id="lottery-bet-amount" class="gift-input" placeholder="Montant de la mise (Min: 1500 FC)">
-                    <button class="gift-submit-btn" id="btn-submit-lottery" onclick="submitLotteryBet()"><i class="fa-solid fa-dice"></i> Participer au tirage</button>
-                </div>
-
-                <div class="lottery-history-box">
-                    <div class="lottery-history-title">
-                        <i class="fa-solid fa-clock-rotate-left" style="color: var(--primary);"></i>
-                        Historique de mes tirages
-                    </div>
-                    <div id="lottery-history-list"></div>
-                </div>
-            </div>
-        </div>
-
         <!-- ================= VUE : PARRAINAGE ================= -->
         <div id="view-referral" class="app-view">
             <div class="app-header">
@@ -2034,11 +1950,6 @@
                     <div class="menu-item" onclick="switchView('gift')">
                         <div class="menu-icon"><i class="fa-solid fa-gift"></i></div>
                         <span class="menu-text">Cadeau / Récompense</span>
-                        <i class="fa-solid fa-chevron-right menu-arrow"></i>
-                    </div>
-                    <div class="menu-item" onclick="switchView('lottery')">
-                        <div class="menu-icon"><i class="fa-solid fa-ticket"></i></div>
-                        <span class="menu-text">Tirage au sort</span>
                         <i class="fa-solid fa-chevron-right menu-arrow"></i>
                     </div>
                     <div class="menu-item" onclick="openFinanceTab('autre')">
@@ -2447,7 +2358,6 @@
         let selectedProduct = null;
         let selectedDepositAmountVal = 0;
         let selectedNetwork = '';
-        let countdownInterval = null;
         let currentTeamTabLevel = 'B';
 
         const networkDetailsConfig = {
@@ -2470,10 +2380,6 @@
                 totalRetrait: 0,
                 investments: [],
                 transactions: [],
-                lotteryHistory: [],
-                lotteryTotalCount: 0,
-                lotteryDailyCount: 0,
-                lotteryLastDate: '',
                 wallet: null,
                 referralCode: 'LDCI-' + Math.floor(100000 + Math.random() * 900000),
                 referredBy: referralCodeParent || '',
@@ -2509,7 +2415,6 @@
             }
         });
 
-        // Fonction de recherche d'un utilisateur par son code de parrainage dans Firestore
         async function findUserByReferralCode(refCode) {
             if (!refCode) return null;
             try {
@@ -2525,10 +2430,9 @@
             return null;
         }
 
-        // Vérification anti-auto-parrainage et anti-boucle sur les 3 niveaux
         async function validateReferralHierarchy(newUserCode, sponsorCode) {
             if (!sponsorCode) return true;
-            if (newUserCode === sponsorCode) return false; // Auto-parrainage direct
+            if (newUserCode === sponsorCode) return false;
 
             let currentCode = sponsorCode;
             let depth = 0;
@@ -2536,7 +2440,7 @@
                 const sponsorUser = await findUserByReferralCode(currentCode);
                 if (!sponsorUser) break;
                 if (sponsorUser.referralCode === newUserCode) {
-                    return false; // Boucle détectée
+                    return false;
                 }
                 currentCode = sponsorUser.referredBy;
                 depth++;
@@ -2555,10 +2459,10 @@
                 const sponsor1UserObj = await findUserByReferralCode(sponsor1Code);
                 if (!sponsor1UserObj) return;
 
-                // Anti-double commission : vérifier si la transaction a déjà attribué des commissions
+                // Anti-double commission
                 const commissionTxTitle = `Commission Niveau 1 - Inv: ${investorUid.slice(-6)}`;
                 if ((sponsor1UserObj.transactions || []).some(t => t.title && t.title.includes(investorUid) && t.title.includes('Niveau 1'))) {
-                    return; // Déjà distribué
+                    return;
                 }
 
                 const nowStr = new Date().toLocaleString('fr-FR', { year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' });
@@ -2645,7 +2549,6 @@
                 return;
             }
 
-            // Génération provisoire du code pour vérification anti-auto-parrainage
             const tempReferralCode = 'LDCI-' + Math.floor(100000 + Math.random() * 900000);
             if (inviteCode) {
                 const isValidHierarchy = await validateReferralHierarchy(tempReferralCode, inviteCode);
@@ -3026,7 +2929,7 @@
 
                     saveTransaction('autre', cost, `Investissement (${selectedProduct.name})`, 'Réussi');
 
-                    // Déclenchement automatique des commissions sur 3 niveaux dès l'investissement validé
+                    // Déclenchement automatique des commissions sur 3 niveaux
                     await distributeReferralCommissions(currentUser, cost);
 
                     updateAccountStats();
@@ -3210,148 +3113,6 @@
             }
         }
 
-        function updateLotteryUI() {
-            let data = getCurrentUserData();
-            const todayStr = new Date().toDateString();
-
-            if (data.lotteryLastDate !== todayStr) {
-                data.lotteryLastDate = todayStr;
-                data.lotteryDailyCount = 0;
-                saveCurrentUserData(data);
-            }
-
-            const historyContainer = document.getElementById('lottery-history-list');
-            historyContainer.innerHTML = '';
-
-            if (!data.lotteryHistory || data.lotteryHistory.length === 0) {
-                historyContainer.innerHTML = '<div style="font-size:11px; color:var(--text-muted); text-align:center; padding:10px;">Aucun historique récent.</div>';
-            } else {
-                data.lotteryHistory.slice().reverse().forEach(item => {
-                    let badgeClass = 'pending';
-                    if (item.status === 'Gagné') badgeClass = 'won';
-                    if (item.status === 'Perdu') badgeClass = 'lost';
-
-                    const div = document.createElement('div');
-                    div.className = 'lottery-history-item';
-                    div.innerHTML = `
-                        <div>
-                            <div style="font-weight:bold; color:var(--text-main);">${item.amount.toLocaleString()} FC</div>
-                            <div style="font-size:10px; color:var(--text-muted);">${item.time}</div>
-                        </div>
-                        <div>
-                            <span class="badge-status ${badgeClass}">${item.status}</span>
-                        </div>
-                    `;
-                    historyContainer.appendChild(div);
-                });
-            }
-
-            const infoElem = document.getElementById('lottery-counter-info');
-            const submitBtn = document.getElementById('btn-submit-lottery');
-            const inputAmount = document.getElementById('lottery-bet-amount');
-
-            infoElem.innerText = `Participations du jour : ${data.lotteryDailyCount} / 15`;
-
-            if (data.lotteryDailyCount >= 15) {
-                submitBtn.disabled = true;
-                submitBtn.innerText = "Quota journalier atteint";
-                inputAmount.disabled = true;
-            } else {
-                submitBtn.disabled = false;
-                submitBtn.innerHTML = '<i class="fa-solid fa-dice"></i> Participer au tirage';
-                inputAmount.disabled = false;
-            }
-        }
-
-        function submitLotteryBet() {
-            const amount = parseFloat(document.getElementById('lottery-bet-amount').value) || 0;
-            let data = getCurrentUserData();
-            const todayStr = new Date().toDateString();
-
-            if (data.lotteryLastDate !== todayStr) {
-                data.lotteryLastDate = todayStr;
-                data.lotteryDailyCount = 0;
-            }
-
-            if (data.lotteryDailyCount >= 15) {
-                showNotification("Limite quotidienne atteinte.", "error");
-                updateLotteryUI();
-                return;
-            }
-
-            if (amount < 1500) {
-                showNotification("Mise minimale : 1 500 FC.", "error");
-                return;
-            }
-
-            if (data.balance < amount) {
-                showNotification("Solde principal insuffisant.", "error");
-                return;
-            }
-
-            const btn = document.getElementById('btn-submit-lottery');
-            if (btn.disabled) return;
-            btn.disabled = true;
-            btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> En cours...`;
-            document.getElementById('lottery-bet-amount').disabled = true;
-
-            data.balance -= amount;
-            data.lotteryTotalCount += 1;
-            data.lotteryDailyCount += 1;
-
-            const timeNow = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-            let isWinner = (data.lotteryTotalCount % 10 === 0);
-
-            const historyItem = {
-                id: Date.now(),
-                amount: amount,
-                time: timeNow,
-                status: 'En cours',
-                isWinner: isWinner
-            };
-
-            data.lotteryHistory.push(historyItem);
-            saveCurrentUserData(data);
-            updateLotteryUI();
-
-            document.getElementById('timer-container').style.display = 'block';
-            let timeLeft = 5;
-
-            countdownInterval = setInterval(() => {
-                timeLeft--;
-                document.getElementById('lottery-timer').innerText = `0${timeLeft}s`;
-
-                if (timeLeft <= 0) {
-                    clearInterval(countdownInterval);
-                    finishLotteryBet(historyItem.id, amount, isWinner);
-                }
-            }, 1000);
-        }
-
-        function finishLotteryBet(itemId, amount, isWinner) {
-            let data = getCurrentUserData();
-            const item = data.lotteryHistory.find(h => h.id === itemId);
-
-            if (isWinner) {
-                item.status = 'Réussi';
-                let gain = amount * 2;
-                data.balance += gain;
-                showNotification(`Félicitations ! Gain de +${gain.toLocaleString()} FC`, "success");
-                saveTransaction('autre', gain, 'Gain de tirage au sort', 'Réussi');
-            } else {
-                item.status = 'Échoué';
-                showNotification("Tirage infructueux. Réessayez !", "error");
-                saveTransaction('autre', amount, 'Participation tirage au sort', 'Réussi');
-            }
-
-            saveCurrentUserData(data);
-            updateLotteryUI();
-            updateAccountStats();
-
-            document.getElementById('timer-container').style.display = 'none';
-            document.getElementById('lottery-bet-amount').value = '';
-        }
-
         function initReferralView() {
             let data = getCurrentUserData();
             if (!data) return;
@@ -3383,17 +3144,14 @@
                     allUsers.push({ uid: docSnap.id, ...docSnap.data() });
                 });
 
-                // Niveau B (filleuls directs)
                 const levelB = allUsers.filter(u => u.referredBy === data.referralCode);
                 
-                // Niveau C (filleuls de niveau B)
                 let levelC = [];
                 const levelBcodes = levelB.map(u => u.referralCode).filter(Boolean);
                 if (levelBcodes.length > 0) {
                     levelC = allUsers.filter(u => levelBcodes.includes(u.referredBy));
                 }
 
-                // Niveau D (filleuls de niveau C)
                 let levelD = [];
                 const levelCcodes = levelC.map(u => u.referralCode).filter(Boolean);
                 if (levelCcodes.length > 0) {
@@ -3402,23 +3160,19 @@
 
                 const totalMembers = levelB.length + levelC.length + levelD.length;
 
-                // Calculs acheteurs & recharges
                 let buyerCountB = levelB.filter(u => Array.isArray(u.investments) && u.investments.length > 0).length;
                 let buyerCountC = levelC.filter(u => Array.isArray(u.investments) && u.investments.length > 0).length;
                 let buyerCountD = levelD.filter(u => Array.isArray(u.investments) && u.investments.length > 0).length;
                 let totalBuyers = buyerCountB + buyerCountC + buyerCountD;
 
                 let teamRechargeTotal = 0;
-                let teamTotalRevenue = 0;
-                let teamTodayRevenue = 0;
 
                 allUsers.forEach(u => {
-                    if (levelB.some(b => b.uid === u.uid) || levelC.some(c => c.uid === u.uid) || levelD.some(u => u.uid === u.uid)) {
+                    if (levelB.some(b => b.uid === u.uid) || levelC.some(c => c.uid === u.uid) || levelD.some(d => d.uid === u.uid)) {
                         teamRechargeTotal += Number(u.totalRecharge || 0);
                     }
                 });
 
-                // Mise à jour des compteurs visuels
                 document.getElementById('team-total-members-display').innerText = totalMembers;
                 document.getElementById('team-total-recharge-display').innerText = teamRechargeTotal.toLocaleString();
                 document.getElementById('team-count-total').innerText = totalMembers;
@@ -3476,7 +3230,6 @@
             });
         }
 
-        // ================= CODES PROMO AVEC PROTECTION ANTI-DOUBLE CLIC =================
         async function submitGiftCode() {
             const codeInput = document.getElementById('gift-code-input').value.trim().toUpperCase();
             if (!codeInput) {
@@ -3560,7 +3313,6 @@
                 btn.innerHTML = originalHTML;
             }
         }
-        // ================= FIN DES CODES PROMO =================
 
         function openSupportModal() {
             document.getElementById('support-modal').classList.add('active');
@@ -3618,10 +3370,6 @@
             } else if (viewName === 'service') {
                 document.getElementById('view-service').classList.add('active');
                 document.getElementById('nav-service-btn').classList.add('active');
-            } else if (viewName === 'lottery') {
-                document.getElementById('view-lottery').classList.add('active');
-                document.getElementById('nav-account-btn').classList.add('active');
-                updateLotteryUI();
             } else if (viewName === 'referral') {
                 document.getElementById('view-referral').classList.add('active');
                 document.getElementById('nav-account-btn').classList.add('active');
