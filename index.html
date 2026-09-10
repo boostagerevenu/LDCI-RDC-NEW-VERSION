@@ -2293,6 +2293,8 @@
               if (profile) {
                 userDataCache = profile;
                 currentUserPhone = profile.phone || currentUserPhone;
+                // Répare automatiquement l'index du code de parrainage des anciens comptes.
+                if (profile.referralCode) await ensureReferralIndex(user.uid, profile.referralCode);
                 updateAccountStats();
                 renderMyProducts();
               } else {
@@ -2417,18 +2419,62 @@
         });
 
         async function findUserByReferralCode(refCode) {
-            if (!refCode) return null;
+            const wanted = String(refCode || '').trim().toUpperCase();
+            if (!wanted) return null;
+
+            // Méthode principale : index public/consultable du code de parrainage.
+            // Cela évite de dépendre d'une requête globale sur users, souvent bloquée
+            // par les règles Firestore.
             try {
-                const q = query(collection(window.firebaseDb, 'users'), where('referralCode', '==', refCode));
+                const indexSnap = await getDoc(doc(window.firebaseDb, 'referralCodes', wanted));
+                if (indexSnap.exists()) {
+                    const index = indexSnap.data() || {};
+                    if (index.uid) {
+                        // Le profil complet n'est pas nécessaire pour créer la relation.
+                        // On retourne donc immédiatement l'UID et le code.
+                        try {
+                            const profileSnap = await getDoc(doc(window.firebaseDb, 'users', index.uid));
+                            if (profileSnap.exists()) {
+                                return { uid: profileSnap.id, ...profileSnap.data() };
+                            }
+                        } catch (profileErr) {
+                            console.warn('Profil parrain non lisible, utilisation de l’index :', profileErr);
+                        }
+                        return { uid: index.uid, referralCode: wanted };
+                    }
+                }
+            } catch (indexErr) {
+                console.warn('Index referralCodes indisponible :', indexErr);
+            }
+
+            // Compatibilité avec les anciens comptes : recherche par champ referralCode.
+            try {
+                const q = query(collection(window.firebaseDb, 'users'), where('referralCode', '==', wanted));
                 const querySnapshot = await getDocs(q);
                 if (!querySnapshot.empty) {
                     const docSnap = querySnapshot.docs[0];
                     return { uid: docSnap.id, ...docSnap.data() };
                 }
             } catch (e) {
-                console.error("Erreur recherche parrain:", e);
+                console.error('Erreur recherche parrain:', e);
             }
             return null;
+        }
+
+        async function ensureReferralIndex(uid, referralCode) {
+            const code = String(referralCode || '').trim().toUpperCase();
+            if (!uid || !code) return;
+            try {
+                await setDoc(doc(window.firebaseDb, 'referralCodes', code), {
+                    uid,
+                    referralCode: code,
+                    updatedAt: new Date().toISOString()
+                }, { merge: true });
+            } catch (e) {
+                // L'index est une optimisation. L'inscription ne doit pas échouer
+                // uniquement parce que cette écriture secondaire est refusée.
+                console.warn('Impossible de créer l’index du code de parrainage:', e);
+            }
         }
 
         async function validateReferralHierarchy(newUserCode, sponsorCode) {
@@ -2570,7 +2616,7 @@
             if (inviteCode) {
                 sponsorUser = await findUserByReferralCode(inviteCode);
                 if (!sponsorUser) {
-                    showNotification("Le code de parrainage est invalide ou n'existe pas.", "error");
+                    showNotification("Le code de parrainage est introuvable. Le lien du parrain est peut-être ancien ou son code n'est pas encore enregistré dans Firebase.", "error");
                     return;
                 }
                 const isValidHierarchy = await validateReferralHierarchy(tempReferralCode, inviteCode);
@@ -2608,6 +2654,9 @@
                     status: 'Réussi'
                 });
                 await window.ldciCreateProfile(uid, data);
+                // Enregistrement obligatoire du code -> UID pour que les prochaines
+                // inscriptions puissent retrouver le parrain sans requête globale.
+                await ensureReferralIndex(uid, data.referralCode);
                 userDataCache = data;
 
                 showNotification("Inscription réussie ! Prime de bienvenue créditée.", "success");
@@ -3147,7 +3196,7 @@
             let data = getCurrentUserData();
             if (!data) return;
             document.getElementById('ref-code-input').value = data.referralCode;
-            document.getElementById('ref-link-input').value = window.location.origin + window.location.pathname + "?ref=" + data.referralCode;
+            document.getElementById('ref-link-input').value = window.location.origin + window.location.pathname + "?ref=" + encodeURIComponent(data.referralCode);
         }
 
         function copyReferralCode() {
