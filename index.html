@@ -3322,28 +3322,26 @@
             const resultMap = new Map();
             if (!sponsorUid) return [];
 
-            // SOURCE PRINCIPALE : users/{uid}.
-            // Chaque inscription avec un lien de parrainage enregistre déjà
-            // referredByUid + referredBy dans le profil du filleul.
-            // Cela permet à B -> C -> D de fonctionner même si la collection
-            // referralRelations n'existe pas encore dans Firestore.
+            const uid = String(sponsorUid).trim();
+            const normalizedCode = String(sponsorCode || '').trim().toUpperCase();
+
+            // 1) Recherche normale par UID du parrain.
             try {
                 const qUid = query(
                     collection(window.firebaseDb, 'users'),
-                    where('referredByUid', '==', String(sponsorUid))
+                    where('referredByUid', '==', uid)
                 );
                 const snapUid = await getDocs(qUid);
                 snapUid.forEach(d => {
                     const u = d.data() || {};
-                    resultMap.set(d.id, { uid: d.id, ...u });
+                    if (d.id !== uid) resultMap.set(d.id, { uid: d.id, ...u });
                 });
             } catch (e) {
                 console.warn('Recherche équipe par referredByUid impossible:', e);
             }
 
-            // COMPATIBILITÉ : anciens comptes qui possèdent seulement le code
-            // du parrain dans referredBy.
-            const normalizedCode = String(sponsorCode || '').trim().toUpperCase();
+            // 2) Compatibilité avec les anciens comptes utilisant uniquement
+            // le code du parrain.
             if (normalizedCode) {
                 try {
                     const qCode = query(
@@ -3353,31 +3351,50 @@
                     const snapCode = await getDocs(qCode);
                     snapCode.forEach(d => {
                         const u = d.data() || {};
-                        resultMap.set(d.id, { uid: d.id, ...u });
+                        if (d.id !== uid) resultMap.set(d.id, { uid: d.id, ...u });
                     });
                 } catch (e) {
                     console.warn('Recherche équipe par referredBy impossible:', e);
                 }
             }
 
-            // SECOURS : conserver la compatibilité avec l'index dédié existant.
-            // Il sera utilisé si les profils users ne permettent pas la lecture
-            // ou si un ancien document n'a pas encore été réparé.
+            // 3) SECOURS ROBUSTE : si les requêtes indexées ne renvoient rien,
+            // on lit les profils users et on compare UID/code côté client.
+            // Cela permet de récupérer les anciens filleuls même si leur champ
+            // referredByUid n'existe pas ou si le code n'a pas la même casse.
+            if (resultMap.size === 0) {
+                try {
+                    const allSnap = await getDocs(collection(window.firebaseDb, 'users'));
+                    allSnap.forEach(d => {
+                        const u = d.data() || {};
+                        if (d.id === uid) return;
+                        const parentUid = String(u.referredByUid || u.sponsorUid || '').trim();
+                        const parentCode = String(u.referredBy || '').trim().toUpperCase();
+                        if (parentUid === uid || (normalizedCode && parentCode === normalizedCode)) {
+                            resultMap.set(d.id, { uid: d.id, ...u });
+                        }
+                    });
+                } catch (e) {
+                    console.warn('Lecture de secours de users impossible:', e);
+                }
+            }
+
+            // 4) Dernier secours : index referralRelations, s'il existe.
             try {
                 const q = query(
                     collection(window.firebaseDb, 'referralRelations'),
-                    where('sponsorUid', '==', String(sponsorUid))
+                    where('sponsorUid', '==', uid)
                 );
                 const snap = await getDocs(q);
                 snap.forEach(d => {
                     const relation = d.data() || {};
-                    if (!resultMap.has(d.id)) {
-                        resultMap.set(d.id, { uid: d.id, ...relation });
+                    const memberUid = relation.memberUid || d.id;
+                    if (memberUid !== uid && !resultMap.has(memberUid)) {
+                        resultMap.set(memberUid, { uid: memberUid, ...relation });
                     }
                 });
             } catch (e) {
-                // L'absence de referralRelations n'empêche plus l'équipe de fonctionner.
-                console.warn('Index referralRelations indisponible, utilisation de users:', e);
+                console.warn('Index referralRelations indisponible:', e);
             }
 
             return Array.from(resultMap.values());
@@ -3388,30 +3405,25 @@
             if (!data || !currentUser) return;
 
             try {
-                // Lecture de l'équipe : users est maintenant la source principale.
-                // On garde referralRelations comme secours pour les anciens comptes.
-                const sponsorProfile = data || {};
                 const B = await getReferralRelationsBySponsor(
                     currentUser,
-                    sponsorProfile.referralCode || ''
+                    data.referralCode || ''
                 );
-                let C = [];
-                let D = [];
 
-                // Niveau C : enfants directs de chaque B.
+                // Niveau C = filleuls directs des B.
                 const cArrays = await Promise.all(B.map(b => getReferralRelationsBySponsor(
-                    b.memberUid || b.uid,
+                    b.uid || b.memberUid,
                     b.referralCode || b.memberCode || ''
                 )));
-                C = Array.from(new Map(cArrays.flat().map(u => [u.uid, u])).values())
+                const C = Array.from(new Map(cArrays.flat().map(u => [u.uid, u])).values())
                     .filter(u => u.uid !== currentUser && !B.some(b => b.uid === u.uid));
 
-                // Niveau D : enfants directs de chaque C.
+                // Niveau D = filleuls directs des C.
                 const dArrays = await Promise.all(C.map(c => getReferralRelationsBySponsor(
-                    c.memberUid || c.uid,
+                    c.uid || c.memberUid,
                     c.referralCode || c.memberCode || ''
                 )));
-                D = Array.from(new Map(dArrays.flat().map(u => [u.uid, u])).values())
+                const D = Array.from(new Map(dArrays.flat().map(u => [u.uid, u])).values())
                     .filter(u =>
                         u.uid !== currentUser &&
                         !B.some(b => b.uid === u.uid) &&
@@ -3419,7 +3431,10 @@
                     );
 
                 const totalMembers = B.length + C.length + D.length;
-                const hasInvestment = u => Boolean(u.hasInvestment) || Number(u.investmentCount || 0) > 0;
+                const hasInvestment = u =>
+                    Boolean(u.hasInvestment) ||
+                    Number(u.investmentCount || 0) > 0 ||
+                    (Array.isArray(u.investments) && u.investments.length > 0);
                 const buyerCountB = B.filter(hasInvestment).length;
                 const buyerCountC = C.filter(hasInvestment).length;
                 const buyerCountD = D.filter(hasInvestment).length;
@@ -3429,35 +3444,28 @@
                     (sum, u) => sum + Number(u.totalRecharge || 0), 0
                 );
 
-                document.getElementById('team-total-members-display').innerText = totalMembers;
-                document.getElementById('team-total-recharge-display').innerText = teamRechargeTotal.toLocaleString();
-                document.getElementById('team-count-total').innerText = totalMembers;
-                document.getElementById('team-count-b').innerText = B.length;
-                document.getElementById('team-count-c').innerText = C.length;
-                document.getElementById('team-count-d').innerText = D.length;
-                document.getElementById('buyer-count-total').innerText = totalBuyers;
-                document.getElementById('buyer-count-b').innerText = buyerCountB;
-                document.getElementById('buyer-count-c').innerText = buyerCountC;
-                document.getElementById('buyer-count-d').innerText = buyerCountD;
+                const setText = (id, value) => {
+                    const el = document.getElementById(id);
+                    if (el) el.innerText = value;
+                };
+                setText('team-total-members-display', totalMembers);
+                setText('team-total-recharge-display', teamRechargeTotal.toLocaleString());
+                setText('team-count-total', totalMembers);
+                setText('team-count-b', B.length);
+                setText('team-count-c', C.length);
+                setText('team-count-d', D.length);
+                setText('buyer-count-total', totalBuyers);
+                setText('buyer-count-b', buyerCountB);
+                setText('buyer-count-c', buyerCountC);
+                setText('buyer-count-d', buyerCountD);
 
                 window.teamCache = { B, C, D };
                 renderTeamTable(currentTeamTabLevel);
             } catch (e) {
                 console.error('Erreur chargement équipe:', e);
-                showNotification(
-                    "Impossible de charger l’équipe. Les règles Firebase doivent autoriser la lecture de referralRelations.",
-                    'error'
-                );
+                window.teamCache = { B: [], C: [], D: [] };
+                renderTeamTable(currentTeamTabLevel);
             }
-        }
-
-        function switchTeamTab(level) {
-            currentTeamTabLevel = level;
-            document.querySelectorAll('.team-tab').forEach(b => b.classList.remove('active'));
-            const activeBtn = document.getElementById('team-tab-' + level);
-            if(activeBtn) activeBtn.classList.add('active');
-
-            renderTeamTable(level);
         }
 
         function renderTeamTable(level) {
