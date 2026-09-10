@@ -3318,20 +3318,69 @@
             }
         }
 
-        async function getReferralRelationsBySponsor(sponsorUid) {
-            const result = [];
-            if (!sponsorUid) return result;
+        async function getReferralRelationsBySponsor(sponsorUid, sponsorCode = '') {
+            const resultMap = new Map();
+            if (!sponsorUid) return [];
+
+            // SOURCE PRINCIPALE : users/{uid}.
+            // Chaque inscription avec un lien de parrainage enregistre déjà
+            // referredByUid + referredBy dans le profil du filleul.
+            // Cela permet à B -> C -> D de fonctionner même si la collection
+            // referralRelations n'existe pas encore dans Firestore.
+            try {
+                const qUid = query(
+                    collection(window.firebaseDb, 'users'),
+                    where('referredByUid', '==', String(sponsorUid))
+                );
+                const snapUid = await getDocs(qUid);
+                snapUid.forEach(d => {
+                    const u = d.data() || {};
+                    resultMap.set(d.id, { uid: d.id, ...u });
+                });
+            } catch (e) {
+                console.warn('Recherche équipe par referredByUid impossible:', e);
+            }
+
+            // COMPATIBILITÉ : anciens comptes qui possèdent seulement le code
+            // du parrain dans referredBy.
+            const normalizedCode = String(sponsorCode || '').trim().toUpperCase();
+            if (normalizedCode) {
+                try {
+                    const qCode = query(
+                        collection(window.firebaseDb, 'users'),
+                        where('referredBy', '==', normalizedCode)
+                    );
+                    const snapCode = await getDocs(qCode);
+                    snapCode.forEach(d => {
+                        const u = d.data() || {};
+                        resultMap.set(d.id, { uid: d.id, ...u });
+                    });
+                } catch (e) {
+                    console.warn('Recherche équipe par referredBy impossible:', e);
+                }
+            }
+
+            // SECOURS : conserver la compatibilité avec l'index dédié existant.
+            // Il sera utilisé si les profils users ne permettent pas la lecture
+            // ou si un ancien document n'a pas encore été réparé.
             try {
                 const q = query(
                     collection(window.firebaseDb, 'referralRelations'),
-                    where('sponsorUid', '==', sponsorUid)
+                    where('sponsorUid', '==', String(sponsorUid))
                 );
                 const snap = await getDocs(q);
-                snap.forEach(d => result.push({ uid: d.id, ...d.data() }));
+                snap.forEach(d => {
+                    const relation = d.data() || {};
+                    if (!resultMap.has(d.id)) {
+                        resultMap.set(d.id, { uid: d.id, ...relation });
+                    }
+                });
             } catch (e) {
-                console.error('Lecture referralRelations impossible:', e);
+                // L'absence de referralRelations n'empêche plus l'équipe de fonctionner.
+                console.warn('Index referralRelations indisponible, utilisation de users:', e);
             }
-            return result;
+
+            return Array.from(resultMap.values());
         }
 
         async function loadTeamData() {
@@ -3339,18 +3388,29 @@
             if (!data || !currentUser) return;
 
             try {
-                // Lecture principale : index dénormalisé, sans lecture des profils financiers des membres.
-                const B = await getReferralRelationsBySponsor(currentUser);
+                // Lecture de l'équipe : users est maintenant la source principale.
+                // On garde referralRelations comme secours pour les anciens comptes.
+                const sponsorProfile = data || {};
+                const B = await getReferralRelationsBySponsor(
+                    currentUser,
+                    sponsorProfile.referralCode || ''
+                );
                 let C = [];
                 let D = [];
 
                 // Niveau C : enfants directs de chaque B.
-                const cArrays = await Promise.all(B.map(b => getReferralRelationsBySponsor(b.memberUid || b.uid)));
+                const cArrays = await Promise.all(B.map(b => getReferralRelationsBySponsor(
+                    b.memberUid || b.uid,
+                    b.referralCode || b.memberCode || ''
+                )));
                 C = Array.from(new Map(cArrays.flat().map(u => [u.uid, u])).values())
                     .filter(u => u.uid !== currentUser && !B.some(b => b.uid === u.uid));
 
                 // Niveau D : enfants directs de chaque C.
-                const dArrays = await Promise.all(C.map(c => getReferralRelationsBySponsor(c.memberUid || c.uid)));
+                const dArrays = await Promise.all(C.map(c => getReferralRelationsBySponsor(
+                    c.memberUid || c.uid,
+                    c.referralCode || c.memberCode || ''
+                )));
                 D = Array.from(new Map(dArrays.flat().map(u => [u.uid, u])).values())
                     .filter(u =>
                         u.uid !== currentUser &&
